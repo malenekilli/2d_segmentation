@@ -2,7 +2,7 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Dropout, Conv2DTranspose, concatenate, BatchNormalization, Activation
 from tensorflow.keras.optimizers import Adam
 
-def unet_model(input_size=(256, 256, 1)):  # Allow variable input dimensions #Bytter ut None med 256
+def unet_model(input_size=(None)):  
     inputs = Input(input_size)
 
     # Contracting Path

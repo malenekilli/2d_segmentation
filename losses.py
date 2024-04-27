@@ -4,6 +4,7 @@ from tensorflow.keras.optimizers import Adam
 import tensorflow as tf
 from tensorflow.keras.losses import binary_crossentropy
 from UNet import model
+from UNet import unet_model
 
 def dice_coefficient(y_true, y_pred):
     smooth = 1e-6  # A small constant to avoid division by zero, more numerically stable
@@ -20,3 +21,6 @@ def combined_loss(y_true, y_pred):
 
 
 model.compile(optimizer=Adam(learning_rate=1e-5), loss=combined_loss, metrics=['accuracy'])
+
+model = UNet(dimensions=2, in_channels=1, out_channels=1, channels=(64, 128, 256, 512), strides=(2, 2, 2))
+loss_function = DiceLoss()
