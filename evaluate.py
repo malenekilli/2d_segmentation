@@ -1,63 +1,47 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import tensorflow as tf
 from tensorflow.keras.models import load_model
-from data_prepros import process_all_files, generate_batches
-from train import train_model
-from losses import dice_coefficient, dice_loss, combined_loss  # Import the functions
+from data_loader import val_loader  # Assume there's a validation data loader
+from monai.metrics import DiceMetric, HausdorffDistanceMetric
 
-def plot_images(true_images, pred_images, num_images=5):
-    plt.figure(figsize=(10, 4))
-    for i in range(num_images):
-        ax = plt.subplot(2, num_images, i + 1)
-        plt.imshow(true_images[i].squeeze(), cmap='gray')
-        ax.title.set_text('Ground Truth')
-        plt.axis('off')
-        ax = plt.subplot(2, num_images, num_images + i + 1)
-        plt.imshow(pred_images[i].squeeze(), cmap='gray')
-        ax.title.set_text('Prediction')
-        plt.axis('off')
-    plt.show()
+# Ensure that GPU is being used if available
+device_name = tf.test.gpu_device_name()
+if device_name:
+    print(f'Found GPU at: {device_name}')
+else:
+    print('GPU device not found, using CPU instead.')
 
-def evaluate_model(model_path, test_data, batch_size=5, threshold=0.5):
-    model = load_model(model_path, custom_objects={'combined_loss': combined_loss, 'accuracy': 'accuracy'})  # Add custom_objects if needed
-    test_batches = generate_batches(test_data, batch_size)
-    test_steps = len(test_data) // batch_size
+# Load the trained model
+model = load_model('model.h5')  # Update this to your model file path
+
+# Metrics setup
+dice_metric = DiceMetric(include_background=True, reduction="mean")
+hd_metric = HausdorffDistanceMetric(percentile=95)
+
+# Evaluation function to convert predictions and labels for metric computation
+def evaluate_model(model, data_loader):
     dice_scores = []
-    # total_loss = 0
-    # total_accuracy = 0
+    hausdorff_distances = []
 
-    for i in range(test_steps):
-        X_test, y_test = next(test_batches)
-        # results = model.evaluate(X_test, y_test, verbose=1)
-        # total_loss += results[0]
-        # total_accuracy += results[1]
+    for batch in data_loader:
+        images, true_masks = batch  # Adjust based on your data_loader output
+        predicted_masks = model.predict(images)
 
-        y_pred = model.predict(X_test)
-        y_pred_binary = (y_pred > threshold).astype(np.int32)
-        dice_score = dice_coefficient(y_test, y_pred_binary)
-        dice_scores.append(dice_score)
-    
-    average_dice_score = np.mean(dice_scores)
-    print("Threshold:", threshold, "Average Dice Coefficient:", average_dice_score)
+        # Binarizing the output and true masks for Dice and HD95 calculation
+        predicted_masks = (predicted_masks > 0.5).astype(np.int32)
+        true_masks = (true_masks > 0.5).astype(np.int32)
 
-    thresholds = [0.1, 0.3, 0.5, 0.7, 0.9]
-    for th in thresholds:
-        evaluate_model(model_path, test_data, batch_size=5, threshold=th)
+        # MONAI expects torch tensors, so convert them
+        predicted_masks = tf.convert_to_tensor(predicted_masks)
+        true_masks = tf.convert_to_tensor(true_masks)
 
-        # if i == 0 or i == 5:
-        #     plot_images(y_test, y_pred_binary, num_images=5)
+        # Update metrics
+        dice_scores.append(dice_metric(predicted_masks, true_masks).numpy())
+        hausdorff_distances.append(hd_metric(predicted_masks, true_masks).numpy())
 
-    # average_loss = total_loss / test_steps
-    # average_accuracy = total_accuracy / test_steps
-    # average_dice_score = np.mean(dice_scores)
+    return np.mean(dice_scores), np.mean(hausdorff_distances)
 
-    # print("Average Loss:", average_loss)
-    # print("Average Accuracy:", average_accuracy)
-    # print("Average Dice Coefficient:", average_dice_score)
-
-if __name__ == "__main__":
-    base_path = '/datasets/tdt4265/mic/asoca'
-    data = process_all_files(base_path)
-    model_path = '/work/malenelk/project_2D/unet_best.keras'
-    _, test_data = train_model(base_path, batch_size=5, epochs=100)
-    evaluate_model(model_path, test_data, batch_size=5)
+# Running the evaluation
+dice_score, hausdorff_distance = evaluate_model(model, val_loader)
+print(f"Average Dice Score: {dice_score}")
+print(f"Average Hausdorff Distance 95th Percentile: {hausdorff_distance}")

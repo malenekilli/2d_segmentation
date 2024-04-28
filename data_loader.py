@@ -20,12 +20,12 @@ def create_train_transforms():
             b_min=0.0, b_max=1.0,
             clip=True
         ),
-        RandAffine(
-            prob=0.5,
-            translate_range=(15,15),
-            scale_range=(0.1,0.1),
-            rotate_range=(0.1)
-        ),
+        # RandAffine(
+        #     prob=0.5,
+        #     translate_range=(15,15),
+        #     scale_range=(0.1,0.1),
+        #     rotate_range=(0.1)
+        # ),
         # RandFlipd(
         #     keys=["img", "seg"],
         #     prob=0.5,
