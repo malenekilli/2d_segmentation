@@ -1,45 +1,85 @@
+import torch
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from data_loader import val_loader  # Assume there's a validation data loader
+import matplotlib.pyplot as plt
+from monai.networks.nets import UNet
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
+from monai.transforms import EnsureType
+from data_loader import val_loader  # make sure your validation loader is suitable for PyTorch
+from UNet import unet_model
 
-# Ensure that GPU is being used if available
-device_name = tf.test.gpu_device_name()
-if device_name:
-    print(f'Found GPU at: {device_name}')
-else:
-    print('GPU device not found, using CPU instead.')
+# Check if CUDA is available, otherwise use CPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = unet_model.to(device)
 
-# Load the trained model
-model = load_model('model.h5')  # Update this to your model file path
-
-# Metrics setup
-dice_metric = DiceMetric(include_background=True, reduction="mean")
+# Metrics setup using MONAI
+dice_metric = DiceMetric(include_background=False, reduction="mean")  # Adjust based on your model's output
 hd_metric = HausdorffDistanceMetric(percentile=95)
 
-# Evaluation function to convert predictions and labels for metric computation
+# Ensure correct data type for MONAI metrics
+ensure_type = EnsureType(device=device)
+
+# Evaluation function
 def evaluate_model(model, data_loader):
+    model.eval()
     dice_scores = []
     hausdorff_distances = []
 
-    for batch in data_loader:
-        images, true_masks = batch  # Adjust based on your data_loader output
-        predicted_masks = model.predict(images)
+    # Randomly select 5 batches for visualization
+    visualize_indices = np.random.choice(len(data_loader), size=5, replace=False)
 
-        # Binarizing the output and true masks for Dice and HD95 calculation
-        predicted_masks = (predicted_masks > 0.5).astype(np.int32)
-        true_masks = (true_masks > 0.5).astype(np.int32)
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(data_loader):
+            images, true_masks = batch['img'].to(device), batch['seg'].to(device)
+            images, true_masks = ensure_type(images), ensure_type(true_masks)
+            
+            predicted_masks = model(images)
+            # Binarizing the outputs for metric calculation
+            predicted_masks = (predicted_masks > 0.8).float()
+            true_masks = true_masks.float()
 
-        # MONAI expects torch tensors, so convert them
-        predicted_masks = tf.convert_to_tensor(predicted_masks)
-        true_masks = tf.convert_to_tensor(true_masks)
+            # Update metrics
+            dice_metric(y_pred=predicted_masks, y=true_masks)
+            hd_metric(y_pred=predicted_masks, y=true_masks)
 
-        # Update metrics
-        dice_scores.append(dice_metric(predicted_masks, true_masks).numpy())
-        hausdorff_distances.append(hd_metric(predicted_masks, true_masks).numpy())
+            # Visualize randomly selected batches
+            if batch_idx in visualize_indices:
+                # Plot the images, true masks, and predicted masks
+                plot_batch(images, true_masks, predicted_masks, batch_idx)
+            
+            # Evaluate metrics every batch
+            dice_scores.append(dice_metric.aggregate().item())
+            hausdorff_distances.append(hd_metric.aggregate().item())
+            dice_metric.reset()
+            hd_metric.reset()
 
     return np.mean(dice_scores), np.mean(hausdorff_distances)
+
+def plot_batch(images, true_masks, predicted_masks, batch_idx):
+    # Move tensors from GPU to CPU and convert to numpy arrays
+    images = images.cpu().numpy()
+    true_masks = true_masks.cpu().numpy()
+    predicted_masks = predicted_masks.cpu().numpy()
+
+    # Plot the first image, true mask, and predicted mask
+    plt.figure(figsize=(12, 4))
+    plt.subplot(1, 3, 1)
+    plt.imshow(images[0, 0], cmap='gray')
+    plt.title('Image')
+    plt.axis('off')
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(true_masks[0, 0], cmap='gray')
+    plt.title('True Mask')
+    plt.axis('off')
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(predicted_masks[0, 0], cmap='gray')
+    plt.title('Predicted Mask')
+    plt.axis('off')
+
+    plt.tight_layout()
+    plt.show()  # Display the visualization momentarily
+    plt.close()
 
 # Running the evaluation
 dice_score, hausdorff_distance = evaluate_model(model, val_loader)
