@@ -12,10 +12,10 @@ from torch.nn.functional import sigmoid
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def init_weights(m):
-    if isinstance(m, torch.nn.Conv2d):
-        torch.nn.init.xavier_uniform_(m.weight)
+    if isinstance(m, nn.Conv2d):
+        nn.init.xavier_uniform_(m.weight)
         if m.bias is not None:
-            torch.nn.init.zeros_(m.bias)
+            nn.init.zeros_(m.bias)
 
 # Model setup
 model = UNet(
@@ -33,17 +33,14 @@ model = UNet(
 loss_function = DiceCELoss(to_onehot_y=False, softmax=False).to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.001)
 
-num_epochs = 30
-# Learning rate scheduler
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+num_epochs = 400
+patience = 100  # Number of epochs to wait after last improvement
+early_stopping_counter = 0  # Counter for early stopping
 
-# Data loaders
-base_path = '/datasets/tdt4265/mic/asoca'
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
 best_val_loss = float('inf')
 best_model_path = "model.pth"
-
-# Training loop
 
 train_losses = []
 val_losses = []
@@ -71,23 +68,30 @@ for epoch in range(num_epochs):
         for val_batch in val_loader:
             val_images, val_masks = val_batch['img'].to(device), val_batch['seg'].to(device)
             val_outputs = model(val_images)
-            val_outputs = sigmoid(outputs)
+            val_outputs = sigmoid(val_outputs)
             val_loss += loss_function(val_outputs, val_masks).item()
         val_loss /= len(val_loader)
         val_losses.append(val_loss)
 
+    # Check if we need to perform early stopping
     if val_loss < best_val_loss:
         best_val_loss = val_loss
         torch.save(model.state_dict(), best_model_path)
         print(f'Saved new best model with validation loss: {best_val_loss}')
+        early_stopping_counter = 0
+    else:
+        early_stopping_counter += 1
+        if early_stopping_counter >= patience:
+            print(f'Stopping early after {patience} epochs without improvement.')
+            break
 
     scheduler.step()
-    current_lr = scheduler.get_last_lr()[0]  # Get the current learning rate
+    current_lr = scheduler.get_last_lr()[0]
     print(f'Epoch {epoch + 1}, Train Loss: {train_loss}, Val Loss: {val_loss}, LR: {current_lr}')
 
 # Plotting
-plt.plot(range(1, num_epochs + 1), train_losses, label='Train Loss')
-plt.plot(range(1, num_epochs + 1), val_losses, label='Val Loss')
+plt.plot(range(1, len(train_losses) + 1), train_losses, label='Train Loss')
+plt.plot(range(1, len(val_losses) + 1), val_losses, label='Val Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
