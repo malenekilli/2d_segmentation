@@ -1,87 +1,85 @@
 import torch
-import numpy as np
 import matplotlib.pyplot as plt
-from monai.networks.nets import UNet
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
-from monai.transforms import EnsureType
-from data_loader import val_loader  # make sure your validation loader is suitable for PyTorch
-from UNet import unet_model
+from data_loader import val_loader
+from monai.networks.nets import UNet
+from monai.networks.layers import Norm
 
-# Check if CUDA is available, otherwise use CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = unet_model.to(device)
 
-# Metrics setup using MONAI
-dice_metric = DiceMetric(include_background=False, reduction="mean")  # Adjust based on your model's output
-hd_metric = HausdorffDistanceMetric(percentile=95)
+# Load the model
+model = UNet(
+    spatial_dims=2,
+    in_channels=1,
+    out_channels=1,
+    channels=(4, 8, 16, 32, 64),
+    strides=(2, 2, 2, 2),
+    num_res_units=2,
+    dropout=0.01,
+    norm=Norm.INSTANCE
+).to(device)
 
-# Ensure correct data type for MONAI metrics
-ensure_type = EnsureType(device=device)
+model.load_state_dict(torch.load("model.pth"))
+model.eval()  # Set model to evaluation mode
 
-# Evaluation function
-def evaluate_model(model, data_loader):
-    model.eval()
+# Metrics setup
+dice_metric = DiceMetric(include_background=True, reduction="mean")
+hd_metric = HausdorffDistanceMetric(include_background=False, percentile=95)
+
+# Function to compute metrics and visualize results
+def evaluate_model(model, data_loader, num_samples=10):
     dice_scores = []
-    hausdorff_distances = []
-
-    # Randomly select 5 batches for visualization
-    visualize_indices = np.random.choice(len(data_loader), size=5, replace=False)
+    hd_scores = []
 
     with torch.no_grad():
-        for batch_idx, batch in enumerate(data_loader):
-            images, true_masks = batch['img'].to(device), batch['seg'].to(device)
-            images, true_masks = ensure_type(images), ensure_type(true_masks)
-            
-            predicted_masks = model(images)
-            # Binarizing the outputs for metric calculation
-            predicted_masks = (predicted_masks > 0.8).float()
-            true_masks = true_masks.float()
+        for i, batch in enumerate(data_loader):
+            images, labels = batch['img'].to(device), batch['seg'].to(device)
+            outputs = torch.sigmoid(model(images))
+            predictions = (outputs > 0.5).float()
 
-            # Update metrics
-            dice_metric(y_pred=predicted_masks, y=true_masks)
-            hd_metric(y_pred=predicted_masks, y=true_masks)
+            if torch.sum(predictions) == 0 and torch.sum(labels) == 0:
+                # Both prediction and label are empty, perfect match
+                dice_score = 1.0
+                hd_score = 0.0  # No distance between empty sets
+            else:
+                dice_metric.reset()
+                dice_metric(y_pred=predictions, y=labels)
+                dice_score = dice_metric.aggregate().item()
+                
+                hd_metric.reset()
+                hd_metric(y_pred=predictions, y=labels)
+                hd_score = hd_metric.aggregate().item()
 
-            # Visualize randomly selected batches
-            if batch_idx in visualize_indices:
-                # Plot the images, true masks, and predicted masks
-                plot_batch(images, true_masks, predicted_masks, batch_idx)
-            
-            # Evaluate metrics every batch
-            dice_scores.append(dice_metric.aggregate().item())
-            hausdorff_distances.append(hd_metric.aggregate().item())
-            dice_metric.reset()
-            hd_metric.reset()
+            dice_scores.append(dice_score)
+            hd_scores.append(hd_score)
 
-    return np.mean(dice_scores), np.mean(hausdorff_distances)
+            if i < num_samples:
+                visualize_segmentation(images[0], predictions[0], labels[0], dice_score, hd_score)
 
-def plot_batch(images, true_masks, predicted_masks, batch_idx):
-    # Move tensors from GPU to CPU and convert to numpy arrays
-    images = images.cpu().numpy()
-    true_masks = true_masks.cpu().numpy()
-    predicted_masks = predicted_masks.cpu().numpy()
+        return dice_scores, hd_scores
 
-    # Plot the first image, true mask, and predicted mask
+
+# Visualization function for segmentation results
+def visualize_segmentation(image, prediction, label, dice_score, hd_score):
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 3, 1)
-    plt.imshow(images[0, 0], cmap='gray')
-    plt.title('Image')
+    plt.imshow(image.cpu().squeeze(), cmap='gray')  # ensure image is 2D
+    plt.title('Original Image')
     plt.axis('off')
-
+    
     plt.subplot(1, 3, 2)
-    plt.imshow(true_masks[0, 0], cmap='gray')
-    plt.title('True Mask')
+    plt.imshow(prediction.cpu().squeeze(), cmap='gray')  # ensure prediction is 2D
+    plt.title(f'Predicted Mask\nDice: {dice_score:.2f}, HD95: {hd_score:.2f}')
     plt.axis('off')
-
+    
     plt.subplot(1, 3, 3)
-    plt.imshow(predicted_masks[0, 0], cmap='gray')
-    plt.title('Predicted Mask')
+    plt.imshow(label.cpu().squeeze(), cmap='gray')  # ensure label is 2D
+    plt.title('Ground Truth')
     plt.axis('off')
+    
+    plt.show()
 
-    plt.tight_layout()
-    plt.show()  # Display the visualization momentarily
-    plt.close()
-
-# Running the evaluation
-dice_score, hausdorff_distance = evaluate_model(model, val_loader)
-print(f"Average Dice Score: {dice_score}")
-print(f"Average Hausdorff Distance 95th Percentile: {hausdorff_distance}")
+# Evaluate the model
+dice_scores, hd_scores = evaluate_model(model, val_loader, num_samples=5)
+print(f'Average Dice Score: {sum(dice_scores) / len(dice_scores):.4f}')
+print(f'Average HD95 Score: {sum(hd_scores) / len(hd_scores):.4f}')
