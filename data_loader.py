@@ -64,31 +64,31 @@ def create_train_transforms():
              b_min=0.0, b_max=1.0,
              clip=True
          ),
-        #RandAffineWithKeys(
-        #    keys=["img", "seg"],
-        #    prob=0.5,
-        #    translate_range=(15, 15),
-        #    scale_range=(0.1, 0.1),
-        #    rotate_range=(0.1)
-        #),
-        #
-        #RandGaussianNoiseWithKeys(
-        #    keys=["img"],
-        #    prob=0.3,
-        #    std=0.1
-        #),
+        RandAffineWithKeys(
+            keys=["img", "seg"],
+            prob=0.5,
+            translate_range=(15, 15),
+            scale_range=(0.1, 0.1),
+            rotate_range=(0.1)
+        ),
+        
+        RandGaussianNoiseWithKeys(
+            keys=["img"],
+            prob=0.3,
+            std=0.1
+        ),
     #
-        #RandGaussianSmoothWithKeys(
-        #    keys=["img"],
-        #    prob=0.2,
-        #    sigma_x=(0.5, 1.5),
-        #    sigma_y=(0.5, 1.5)
-        #),
-        #RandAdjustContrastWithKeys(
-        #    keys=["img"],
-        #    prob=0.3,
-        #    gamma=(0.5, 1.5)
-        #),
+        RandGaussianSmoothWithKeys(
+            keys=["img"],
+            prob=0.2,
+            sigma_x=(0.5, 1.5),
+            sigma_y=(0.5, 1.5)
+        ),
+        RandAdjustContrastWithKeys(
+            keys=["img"],
+            prob=0.3,
+            gamma=(0.5, 1.5)
+        ),
 
         ToTensord(keys=["img", "seg"])
     ])
