@@ -4,14 +4,11 @@ from monai.transforms import MapTransform
 from monai.transforms import(
     Compose,
     ScaleIntensityRanged,
-    RandRotate90d,
-    RandFlipd,
     ToTensord,
     RandAffine,
     RandGaussianNoise,
     RandGaussianSmooth,
     RandAdjustContrast,
-    # RandElastic
     )
 
 
@@ -61,51 +58,37 @@ class RandAdjustContrastWithKeys(MapTransform):
 
 def create_train_transforms():
     return Compose([
-        ScaleIntensityRanged(
-            keys=["img"],
-            a_min=0, a_max=255,
-            b_min=0.0, b_max=1.0,
-            clip=True
-        ),
-        RandAffineWithKeys(
-            keys=["img", "seg"],
-            prob=0.5,
-            translate_range=(15, 15),
-            scale_range=(0.1, 0.1),
-            rotate_range=(0.1)
-        ),
-        # RandFlipd(
-        #     keys=["img", "seg"],
-        #     prob=0.5,
-        #     spatial_axis=[1, 2]
-        # ),
-        # RandRotate90d(
-        #     keys=["img", "seg"],
-        #     prob=1.0,
-        #     spatial_axes=[1, 2]
-        # ),
-        RandGaussianNoiseWithKeys(
-            keys=["img"],
-            prob=0.3,
-            std=0.1
-        ),
-        # RandElastic(
-        #     keys=["img", "seg"],
-        #     prob=0.2,
-        #     spacing=(30, 30),
-        #     magnitude_range=(5, 6)
-        # ),
-        RandGaussianSmoothWithKeys(
-            keys=["img"],
-            prob=0.2,
-            sigma_x=(0.5, 1.5),
-            sigma_y=(0.5, 1.5)
-        ),
-        RandAdjustContrastWithKeys(
-            keys=["img"],
-            prob=0.3,
-            gamma=(0.5, 1.5)
-        ),
+         ScaleIntensityRanged(
+             keys=["img"],
+             a_min=0, a_max=255, 
+             b_min=0.0, b_max=1.0,
+             clip=True
+         ),
+        #RandAffineWithKeys(
+        #    keys=["img", "seg"],
+        #    prob=0.5,
+        #    translate_range=(15, 15),
+        #    scale_range=(0.1, 0.1),
+        #    rotate_range=(0.1)
+        #),
+        #
+        #RandGaussianNoiseWithKeys(
+        #    keys=["img"],
+        #    prob=0.3,
+        #    std=0.1
+        #),
+    #
+        #RandGaussianSmoothWithKeys(
+        #    keys=["img"],
+        #    prob=0.2,
+        #    sigma_x=(0.5, 1.5),
+        #    sigma_y=(0.5, 1.5)
+        #),
+        #RandAdjustContrastWithKeys(
+        #    keys=["img"],
+        #    prob=0.3,
+        #    gamma=(0.5, 1.5)
+        #),
 
         ToTensord(keys=["img", "seg"])
     ])
@@ -126,13 +109,6 @@ train_transforms = create_train_transforms()
 val_transforms = create_val_transforms()
 
 
-# # Transform the data using training and validation transforms
-# transformed_train_data = [train_transforms(item) for item in train_data]
-# transformed_val_data = [val_transforms(item) for item in val_data]
-
-# print("Transformed Train Image Shape:", transformed_train_data["img"].shape)
-# print("Transformed Val Image Shape:", transformed_val_data["seg"].shape)
-
     
     
 train_dataset=Dataset(train_data, train_transforms)
@@ -140,13 +116,6 @@ val_dataset= Dataset(val_data, val_transforms)
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
 val_loader=DataLoader(val_dataset,batch_size=2, shuffle=True, num_workers=4)
 
-
-# # Iterate through one epoch to see the debug output
-# for i, data in enumerate(train_loader):
-#     pass  # The debug statements will print during iteration
-
-# for i, data in enumerate(val_loader):
-#     pass  # Debug for validation data
 
 
 
@@ -192,19 +161,7 @@ class CustomMedicalDataset(Dataset):
 
     
 
-    # def create_train_transforms():
-    #     return Compose([
-    #         ScaleIntensityRanged(keys=["img"], a_min=0, a_max=255, b_min=0.0, b_max=1.0, clip=True),
-    #         RandAffineWithKeys(keys=["img", "seg"], prob=0.5, translate_range=(15, 15), scale_range=(0.1, 0.1), rotate_range=(0.1)),
-    #         RandFlipd(keys=["img", "seg"], prob=0.5, spatial_axis=[1, 2]),
-    #         RandRotate90d(keys=["img", "seg"], prob=1.0, spatial_axes=[1, 2]),
-    #         RandGaussianNoiseWithKeys(keys=["img"], prob=0.3, std=0.1),
-    #         RandGaussianSmoothWithKeys(keys=["img"], prob=0.2, sigma_x=(0.5, 1.5), sigma_y=(0.5, 1.5)),
-    #         RandAdjustContrastWithKeys(keys=["img"], prob=0.3, gamma=(0.5, 1.5)),
-    #         ToTensord(keys=["img", "seg"])
-    # ])
-
-
+   
 
 train_dataset = CustomMedicalDataset(train_data, transform=create_train_transforms())
 val_dataset = CustomMedicalDataset(val_data, transform=create_val_transforms())
@@ -212,11 +169,4 @@ val_dataset = CustomMedicalDataset(val_data, transform=create_val_transforms())
 train_loader = DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
 val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=4)
 
-# Example of how to use the data loader
-    
-# try:
-#     for i, data in enumerate(train_loader):
-#         print(f"Batch {i} - Image shapes: {data['img'].shape}, Segmentation shapes: {data['seg'].shape}")
-# except Exception as e:
-#     print(f"Error processing batch {i}: {str(e)}")
-#     raise
+
