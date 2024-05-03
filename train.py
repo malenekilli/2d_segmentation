@@ -17,24 +17,29 @@ def init_weights(m):
         if m.bias is not None:
             nn.init.zeros_(m.bias)
 
+leaky_relu=nn.LeakyReLU(negative_slope=0.01)
+
 # Model setup
 model = UNet(
     spatial_dims=2,
     in_channels=1,
     out_channels=1,
-    channels=(4, 8, 16, 32, 64),
-    strides=(2, 2, 2, 2),
+    channels=(4, 8, 16, 32,64), #act=relu, kernel size=3
+    strides=(2, 2, 2,2),
     num_res_units=2,
-    dropout=0.01,
-    norm=Norm.INSTANCE
+    dropout=0.4,
+    norm=Norm.INSTANCE,
+    kernel_size=3
 ).to(device)
+
+
 
 # Loss and optimizer
 loss_function = DiceCELoss(to_onehot_y=False, softmax=False).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.001)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=0.1) #0.001 orginalt
 
-num_epochs = 400
-patience = 100  # Number of epochs to wait after last improvement
+num_epochs = 700
+patience = 40  # Number of epochs to wait after last improvement
 early_stopping_counter = 0  # Counter for early stopping
 
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)

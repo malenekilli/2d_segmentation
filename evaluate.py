@@ -1,23 +1,30 @@
 import torch
 import matplotlib.pyplot as plt
 from monai.metrics import DiceMetric, HausdorffDistanceMetric
-from data_loader import val_loader
+from data_loader import test_loader
 from monai.networks.nets import UNet
 from monai.networks.layers import Norm
 
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Load the model
+# Model setup
+# Model setup
 model = UNet(
     spatial_dims=2,
     in_channels=1,
     out_channels=1,
-    channels=(4, 8, 16, 32, 64),
-    strides=(2, 2, 2, 2),
+    channels=(4, 8, 16, 32,64), #act=relu, kernel size=3
+    strides=(2, 2, 2,2),
     num_res_units=2,
-    dropout=0.01,
-    norm=Norm.INSTANCE
+    dropout=0.1,
+    norm=Norm.INSTANCE,
+
+    kernel_size=3
 ).to(device)
+
+
+
 
 model.load_state_dict(torch.load("model.pth"))
 model.eval()  # Set model to evaluation mode
@@ -34,8 +41,9 @@ def evaluate_model(model, data_loader, num_samples=10):
     with torch.no_grad():
         for i, batch in enumerate(data_loader):
             images, labels = batch['img'].to(device), batch['seg'].to(device)
-            outputs = torch.sigmoid(model(images))
-            predictions = (outputs > 0.5).float()
+            outputs = model(images)
+            outputs=torch.sigmoid(outputs)
+            predictions = (outputs > 0.4).float()
 
             if torch.sum(predictions) == 0 and torch.sum(labels) == 0:
                 # Both prediction and label are empty, perfect match
@@ -80,6 +88,6 @@ def visualize_segmentation(image, prediction, label, dice_score, hd_score):
     plt.show()
 
 # Evaluate the model
-dice_scores, hd_scores = evaluate_model(model, val_loader, num_samples=5)
+dice_scores, hd_scores = evaluate_model(model, test_loader, num_samples=5)
 print(f'Average Dice Score: {sum(dice_scores) / len(dice_scores):.4f}')
 print(f'Average HD95 Score: {sum(hd_scores) / len(hd_scores):.4f}')
